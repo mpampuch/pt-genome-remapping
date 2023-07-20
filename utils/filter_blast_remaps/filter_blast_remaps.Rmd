@@ -1,0 +1,249 @@
+# Import Required Libraries
+```{r}
+library(tidyverse)
+library(Biostrings)
+```
+
+# Import data
+```{r}
+
+old_gff <- read.table(file = '/Users/markpampuch/Dropbox/UWO/grad_school/bioinformatics/remapping_attempt/CORRECT_OLD_TO_NEW_MAPPING/genome_data/old/cleaned_up_metadata_file/old_annotation_data_fully_cleaned_and_w_unique_lines.gff', sep = '\t', header = FALSE)
+BLAST_pre_filtering <- read.table(file = '/Users/markpampuch/Dropbox/UWO/grad_school/bioinformatics/remapping_attempt/CORRECT_OLD_TO_NEW_MAPPING/blast_outputs/all_blasted_to_new_assembly_WITH_ALL_INFO_FINAL.tsv', sep = '\t', header = FALSE)
+BLAST_post_synteny <- read.table(file = "/Users/markpampuch/Dropbox/UWO/grad_school/bioinformatics/remapping_attempt/CORRECT_OLD_TO_NEW_MAPPING/blast_outputs/all_blasted_to_new_assembly_WITH_ALL_INFO_FINAL_and_FILTERED_POST_SYNTENY_CHECK.tsv", sep = '\t', header = TRUE)
+```
+
+Headers are as follows
+1. qseqid: query or source (e.g., gene) sequence id
+2. sseqid: subject or target (e.g., reference genome) sequence id
+3. pident: percentage of identical matches
+4. length: alignment length (sequence overlap)
+5. mismatch: number of mismatches
+6. gapopen: number of gap openings
+7. qstart: start of alignment in query
+8. qend: end of alignment in query
+9. sstart: start of alignment in subject
+10. send: end of alignment in subject
+11. evalue: expect value
+12. bitscore: bit score
+13. sstrand: Subject Strand
+14. order(custom): line number for that line in the original BLAST tsv file
+15. N_score(custom): Global alignment score from Emboss Needle
+16. First_10 (custom): How many of the first 10 bp are the same between the query and the subject sequence
+17. Last_10 (custom): How many of the last 10 bp are the same between the query and the subject sequence
+18. First_9 (custom): How many of the first 9 bp are the same between the query and the subject sequence
+19. Last_9 (custom): How many of the last 9 bp are the same between the query and the subject sequence
+20. First_8 (custom): How many of the first 8 bp are the same between the query and the subject sequence
+21. Last_8 (custom): How many of the last 8 bp are the same between the query and the subject sequence
+22. First_7 (custom): How many of the first 7 bp are the same between the query and the subject sequence
+23. Last_7 (custom): How many of the last 7 bp are the same between the query and the subject sequence
+24. First_6 (custom): How many of the first 6 bp are the same between the query and the subject sequence
+25. Last_6 (custom): How many of the last 6 bp are the same between the query and the subject sequence
+26. First_5 (custom): How many of the first 5 bp are the same between the query and the subject sequence
+27. Last_5 (custom): How many of the last 5 bp are the same between the query and the subject sequence
+28. First_4 (custom): How many of the first 4 bp are the same between the query and the subject sequence
+29. Last_4 (custom): How many of the last 4 bp are the same between the query and the subject sequence
+30. First_3 (custom): How many of the first 3 bp are the same between the query and the subject sequence
+31. Last_3 (custom): How many of the last 3 bp are the same between the query and the subject sequence
+32. First_2 (custom): How many of the first 2 bp are the same between the query and the subject sequence
+33. Last_2 (custom): How many of the last 2 bp are the same between the query and the subject sequence
+34. First_1 (custom): How many of the first 1 bp are the same between the query and the subject sequence
+35. Last_1 (custom): How many of the last 1 bp are the same between the query and the subject sequence
+36. q_length (custom): The length of the whole query sequence
+37. q_chr (custom): What chromosome the query sequence sits on
+38. q_old_start (custom): Starting of coordinates query sequence sits on in the old assembly
+39. q_old_end (custom): Ending of coordinates query sequence sits on in the old assembly
+40. q_old_strand (custom): Whether the query sits on the plus strand or the minus strand in the old assembly
+41. query_feature_source (custom): The algorithm or procedure that generated the feature. This is typically the name of a software or database.
+42. query_feature_type (custom): The feature type name, like "gene" or "exon". In a well structured GFF file, all the children features always follow their parents in a single block (so all exons of a transcript are put after their parent "transcript" feature line and before any other parent transcript line). In GFF3, all features and their relationships should be compatible with the standards released by the Sequence Ontology Project.
+43. query_feature_score (custom): Numeric value that generally indicates the confidence of the source in the annotated feature. A value of "." (a dot) is used to define a null value.
+44. query_feature_phase (custom): phase of CDS features; it can be either one of 0, 1, 2 (for CDS features) or "." (for everything else). See the section below for a detailed explanation.
+45. q_metadata (custom): A list of tag-value pairs separated by a semicolon with additional information about the feature. (metadata)
+46. mapping_row_in_sorted_paf_file_0_based (custom): row in sorted old to new assembly mapping .paf file (0-indexed) where mapping that query sequence is supposed to come from
+47. expected_chromosome_to_map_to (custom): where the feature is expected to map to
+48. old_chr_start_of_mapped_region (custom): start position of the region on the original sequence where the feature is supposed to come from
+49. old_chr_end_of_mapped_region (custom): end position of the region on the original sequence where the feature is supposed to come from
+50. s_length (custom): The length of the subject sequence
+51. in_acceptable_region (custom): Whether or not the local alignment passed the synteny check
+52. how_features_old_chr_maps_to_new (custom): Whether the mapping region where the query sequence is derived from maps to the positive or negative strand of the new chromosome
+
+# Filtering based on which have the highest global alignment score
+```{r}
+# Grab queries that appear multiple times in the filtered table
+all_query_ids <- unname(unlist(select(BLAST_post_synteny, qseqid)))
+duplicate_queries <- base::unique(all_query_ids[all_query_ids %in% all_query_ids[duplicated(all_query_ids)] ])
+
+# filter out rows that start with those ids
+BLAST_post_synteny_sorted_and_with_dups<- filter(BLAST_post_synteny, qseqid %in% duplicate_queries) %>%
+  group_by(qseqid) %>%
+  arrange(qseqid, desc(needle_score), by_group = TRUE)
+```
+
+Now loop through all ids and grab how many rows have the max needle score
+
+```{r}
+# grab all unique query ids that show up in the filtered table that still has duplicates
+Sorted_and_with_dups_unique_ids <- unname(unlist(distinct(select(BLAST_post_synteny_sorted_and_with_dups, qseqid))))
+
+# Set a variable that keeps track of the queries that have duplicate max needle scores
+ids_with_duplicate_max_needle_score <- NULL
+
+# loop through every query sequence and check if they have unique max needle scores
+for (i in Sorted_and_with_dups_unique_ids) 
+{
+  ith_rows <- filter(BLAST_post_synteny_sorted_and_with_dups, qseqid == i)
+  number_of_rows_with_highest_needle_score <- length(ith_rows$needle_score[ith_rows$needle_score == max(ith_rows$needle_score)])
+  
+  # Check if any query sequences have more than one highest needle score
+  if (number_of_rows_with_highest_needle_score > 1)
+  {
+    ids_with_duplicate_max_needle_score <- append(ids_with_duplicate_max_needle_score, i) 
+  }
+}
+
+
+
+# Filter out all the rows that had duplicate max needle scores from the filtered table
+# TODO here is probably where you want to take extra care to process any identical rows
+BLAST_post_synteny_sorted_and_with_no_dup_max_needle_scores <- filter(BLAST_post_synteny, !(qseqid %in% ids_with_duplicate_max_needle_score))
+
+# Can uncomment the following lines to see that it worked
+# length(unique(BLAST_post_synteny$qseqid)) # [1] 56146
+# length(unique(BLAST_post_synteny_sorted_and_with_no_dup_max_needle_scores$qseqid)) # [1] 55902
+# length(ids_with_duplicate_max_needle_score) # [1] 244
+# 56146-55902 # [1] 244
+```
+
+Now that all the rows remaining in the filtered table are rows that have only unique highest needle scores, can isolate those rows from the table 
+
+pseudocode
+- Set a variable that will be the final variable with a table that has all non-highest needle score rankings removed
+  - This variable will be a copy of the filtered table that has only unique highest needle scores and will remove rows as you go query by query
+- Loop through each query id
+- Grab the max needle score for those rows
+- remove rows from the original table where the name is equal to the query id and the needle score is not equal to the needle score
+
+```{r, results=FALSE, message=FALSE, warning=FALSE}
+# Set a variable that keeps track of the queries that have duplicate max needle scores
+BLAST_post_synteny_sorted_no_duplicate_queries_FINAL <- BLAST_post_synteny_sorted_and_with_no_dup_max_needle_scores
+counter <- 0
+# loop through every query sequence and check if they have unique max needle scores
+for (i in BLAST_post_synteny_sorted_and_with_no_dup_max_needle_scores$qseqid)
+{
+  counter <- counter + 1
+  ith_rows <- filter(BLAST_post_synteny_sorted_and_with_no_dup_max_needle_scores, qseqid == i)
+  highest_needle_score <- max(ith_rows$needle_score)
+  
+
+  # filter out rows from the original table if the query id is the same as the what is being currently looped through and the highest_needle_score is not equal to the max needle score
+
+  BLAST_post_synteny_sorted_no_duplicate_queries_FINAL <- filter(BLAST_post_synteny_sorted_no_duplicate_queries_FINAL, !(qseqid == i & needle_score != highest_needle_score)) 
+  
+  # Print out progress
+  if (counter > 0 & counter %% 500 == 0 | counter == 1 | counter == length(BLAST_post_synteny_sorted_and_with_no_dup_max_needle_scores$qseqid))
+  {
+  print(paste0(counter, " out of ", length(BLAST_post_synteny_sorted_and_with_no_dup_max_needle_scores$qseqid), " completed"))
+  }
+  
+  if (counter == length(BLAST_post_synteny_sorted_and_with_no_dup_max_needle_scores$qseqid))
+  {
+    print("done")
+  }
+}
+```
+
+```{r}
+# Write Global Alignment filtered Blast table to output
+print("Writing Filtered Table to file")
+write.table(x = BLAST_post_synteny_sorted_no_duplicate_queries_FINAL, file = "/Users/markpampuch/Dropbox/UWO/grad_school/bioinformatics/remapping_attempt/CORRECT_OLD_TO_NEW_MAPPING/blast_outputs/all_blasted_to_new_assembly_WITH_ALL_INFO_FINAL_and_FULLY_FILTERED.tsv", append = FALSE, quote = FALSE, sep = "\t", dec = ".",
+            row.names = FALSE, col.names = TRUE)
+print("Done")
+```
+
+# Check which ones were remapped and which weren't
+```{r}
+unique_q_ids <- unique(BLAST_pre_filtering$V1)
+
+unique_q_ids_filtered <- BLAST_post_synteny_sorted_no_duplicate_queries_FINAL$qseqid
+
+# grab queries that successfully remapped and didn't remap
+remapped_qs <- intersect(unique_q_ids, unique_q_ids_filtered)
+print(paste0(length(remapped_qs), " remapped"))
+non_remapped_qs <- setdiff(unique_q_ids, unique_q_ids_filtered)
+print(paste0(length(non_remapped_qs), " did not remap after BLASTing"))
+
+
+# Print feature by feature breakdown
+remapped_qs_table <- filter(old_gff, V9 %in% str_match(remapped_qs, '^.*(?=(:{2}))')[,1])
+print("Remapped Features")
+summary.factor(remapped_qs_table$V3)
+
+non_remapped_qs_table <- filter(old_gff, V9 %in% str_match(non_remapped_qs, '^.*(?=(:{2}))')[,1])
+print("Non Remapped Features")
+summary.factor(non_remapped_qs_table$V3)
+```
+
+```{r}
+# Output the tables to gffs
+write.table(x = remapped_qs_table[1:9], file = "/Users/markpampuch/Dropbox/UWO/grad_school/bioinformatics/remapping_attempt/CORRECT_OLD_TO_NEW_MAPPING/genome_data/new/remapped_features_COORDS_NOT_UPDATED.gff", append = FALSE, quote = FALSE, sep = "\t", dec = ".",
+            row.names = FALSE, col.names = FALSE)
+
+write.table(x = non_remapped_qs_table[1:9], file = "/Users/markpampuch/Dropbox/UWO/grad_school/bioinformatics/remapping_attempt/CORRECT_OLD_TO_NEW_MAPPING/genome_data/new/non_remapped_features_FROM_BLAST_OUTPUT_ONLY.gff", append = FALSE, quote = FALSE, sep = "\t", dec = ".",
+            row.names = FALSE, col.names = FALSE)
+```
+
+# Merge filtered BLAST table and GFF tables to begin updating coordinates
+```{r}
+# clean up gff files for this to work
+old_gff <- old_gff[1:9]
+colnames(old_gff) <- c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "q_metadata")
+merged_remapped_table_with_BLAST_info <- dplyr::inner_join(old_gff, BLAST_post_synteny_sorted_no_duplicate_queries_FINAL, by = "q_metadata")
+```
+
+```{r}
+# Sort the merged table by the sequence id (numerically after the "_") and then by the start position
+merged_remapped_table_with_BLAST_info_sorted <- merged_remapped_table_with_BLAST_info[order(as.numeric(str_match(merged_remapped_table_with_BLAST_info$sseqid, '_(\\d+)')[,2]), merged_remapped_table_with_BLAST_info$sstart),]
+#NEEDS TO BE SORTED AFTER FILTERING BECAUSE NEEDS START COLUMN TO BE CONSISTENT (so after it is updated because right now the start column is sometimes bigger than the end column if the feature is mapped to the minus strand)
+```
+
+
+```{r}
+# Output the joined tables to 
+write.table(x = merged_remapped_table_with_BLAST_info, file = "/Users/markpampuch/Dropbox/UWO/grad_school/bioinformatics/remapping_attempt/CORRECT_OLD_TO_NEW_MAPPING/genome_data/new/merged_remapped_table_with_BLAST_info.gff", append = FALSE, quote = FALSE, sep = "\t", dec = ".",
+            row.names = FALSE, col.names = FALSE)
+# > colnames(merged_remapped_table_with_BLAST_info)
+#  [1] "seqid"                              "source"                            
+#  [3] "type"                               "start"                             
+#  [5] "end"                                "score"                             
+#  [7] "strand"                             "phase"                             
+#  [9] "q_metadata"                         "qseqid"                            
+# [11] "sseqid"                             "pident"                            
+# [13] "length"                             "mismatch"                          
+# [15] "gapopen"                            "qstart"                            
+# [17] "qend"                               "sstart"                            
+# [19] "send"                               "evalue"                            
+# [21] "bitscore"                           "sstrand"                           
+# [23] "order"                              "needle_score"                      
+# [25] "first_10"                           "last_10"                           
+# [27] "first_9"                            "last_9"                            
+# [29] "first_8"                            "last_8"                            
+# [31] "first_7"                            "last_7"                            
+# [33] "first_6"                            "last_6"                            
+# [35] "first_5"                            "last_5"                            
+# [37] "first_4"                            "last_4"                            
+# [39] "first_3"                            "last_3"                            
+# [41] "first_2"                            "last_2"                            
+# [43] "first_1"                            "last_1"                            
+# [45] "q_length"                           "q_chr"                             
+# [47] "q_old_start"                        "q_old_end"                         
+# [49] "q_old_strand"                       "q_old_source"                      
+# [51] "q_old_type"                         "q_old_score"                       
+# [53] "q_old_phase"                        "mapping_row_in_paf_0i"             
+# [55] "expected_chromosome"                "mapping_start_on_old_chromosome"   
+# [57] "mapping_end_on_old_chromosome"      "if_query_and_target_on_same_strand"
+# [59] "mapping_start_on_new_chromosome"    "mapping_end_on_new_chromosome"     
+# [61] "mapping_q_score"                    "s_length"                          
+# [63] "in_acceptable_region"               "orientation_check"
+```
+
+```{r}
+```

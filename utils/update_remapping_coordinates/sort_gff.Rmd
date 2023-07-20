@@ -1,0 +1,45 @@
+# Load Required Libraries
+```{r}
+library(tidyverse)
+```
+# Import GFF file
+
+```{r}
+# Format input files
+# wd <- getwd()
+# wdFormatted <- paste0(wd,"/")
+# commandLineArgsInputFilePath <- commandArgs(trailingOnly = TRUE)[1]
+# 
+# pafFileDir <- paste0(head(str_split(commandLineArgsInputFilePath, "/")[[1]], -1), collapse = "/")
+# separator <- if (pafFileDir != "") "/" else "./" 
+# pafFileName <- tail(str_split(commandLineArgsInputFilePath, "/")[[1]], 1)
+# finalPafFilePath <- paste0(pafFileDir, separator, pafFileName)
+# pafFileOutput <- paste0(head(str_split(finalPafFilePath, ".paf")[[1]], 1), "_coverage", ".", deviceOutput)
+# pafFileCopyToDir <- "/Library/Frameworks/R.framework/Versions/4.0/Resources/library/pafr/extdata/"
+# invisible(file.copy(from = commandLineArgsInputFilePath, to = paste0(pafFileCopyToDir, pafFileName), overwrite = TRUE))
+```
+```{r}
+commandLineArgsInputFilePath <- commandArgs(trailingOnly = TRUE)[1]
+gff <- read_tsv(commandLineArgsInputFilePath, col_names = FALSE)
+colnames(gff) <- c("seqid", "source", "type", "start", "end", "score", "strand", "phase", "q_metadata")
+```
+
+# Sort Dataframe
+Sort the dataframe by the first column (chromosome) (numerically after the "_") and then by the fourth column (start position)
+1. First rename the seqid column to everything after the "_" and convert to numeric
+2. Then sort the dataframe by the new seqid column and the start column
+3. Then rename the seqid column back to the original name (convert to character and add the "chromosome_" back on)
+
+```{r}
+# gff <- gff %>% mutate(seqid = as.numeric(str_sub(seqid, str_locate(seqid, "_")[2,2] + 1, -1)))
+gff <- gff %>% arrange(seqid, start)
+gff <- gff %>% mutate(seqid = as.character(paste0("chromosome_", seqid)))
+```
+
+# Write to File
+Write the sorted dataframe to a new file
+
+```{r}
+write_tsv(gff, "/Users/markpampuch/Dropbox/UWO/grad_school/bioinformatics/remapping_attempt/CORRECT_OLD_TO_NEW_MAPPING/genome_data/new/final_remapped_data_SORTED_and_MINUS_ORIGINAL_METADATA.gff", col_names = FALSE)
+```
+
