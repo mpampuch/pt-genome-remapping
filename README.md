@@ -2,6 +2,9 @@
 
 Here contains all the files and scripts used to perform remapping of Phatr3 annoation data from the GCA_000150955.2 (Diatom Consortium) genome assembly to the GCA_914521175.1 (Telomere-to-telomere) genome assembly of Phaeodactylum tricornutum.
 
+Data is hosted on UCSC and can be accessed through the following URL: https://genome.ucsc.edu/cgi-bin/hgGateway?hgsid=1828134926_AOVBj4mafegeRJoItfGJ2k2cDR0R
+
+
 ## Step 1: Clean up data files
 
 ### 1. Clean up metadata
